@@ -1,0 +1,85 @@
+:root {
+  /* Default Theme (Dark) */
+  --bg-color: #323437;
+  --main-color: #e2b714;
+  --caret-color: #e2b714;
+  --sub-color: #646669;
+  --sub-alt-color: #2c2e31;
+  --text-color: #d1d0c5;
+  --error-color: #ca4754;
+  --error-extra-color: #7e2a33;
+  --colorful-error-color: #ca4754;
+  --colorful-error-extra-color: #7e2a33;
+
+  --font-family: 'Lexend Deca', 'Roboto', 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: var(--font-mono);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  width: 100%;
+  max-width: 1350px;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+input {
+  font-family: inherit;
+}
+
+input::placeholder {
+  color: var(--sub-color);
+  font-family: inherit;
+}
+
+button {
+  background: none;
+  border: none;
+  color: var(--sub-color);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 1rem;
+  transition: color 0.2s ease;
+}
+
+button:hover {
+  color: var(--text-color);
+}
+
+.active-btn {
+  color: var(--main-color);
+}
+
+.hidden-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+  animation: fadeIn 0.25s ease-out forwards;
+}

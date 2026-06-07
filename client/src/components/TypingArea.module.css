@@ -1,0 +1,87 @@
+.typingArea {
+  position: relative;
+  font-size: var(--typing-font-size, 2rem);
+  font-weight: var(--typing-font-weight, 400);
+  line-height: var(--typing-line-height, 1.25);
+  width: 100%;
+  max-width: var(--typing-page-width, 1000px);
+  display: block;
+  user-select: none;
+  cursor: text;
+  color: var(--sub-color);
+  height: calc(3 * var(--typing-font-size, 2rem) * var(--typing-line-height, 1.25) + 1.2rem);
+  overflow: hidden;
+  transition: max-width 0.25s ease;
+}
+
+.word {
+  margin: 0.25rem var(--typing-word-spacing, 0.5rem);
+  display: flex;
+  position: relative;
+}
+
+.char {
+  transition: color 0.15s ease-out;
+}
+
+.correct {
+  color: var(--text-color);
+}
+
+.incorrect {
+  color: var(--error-color);
+}
+
+.extra {
+  color: var(--error-extra-color);
+}
+
+/* Caret */
+.caret {
+  position: absolute;
+  top: var(--caret-top, 3px);
+  left: 0;
+  width: var(--caret-width, 2px);
+  height: var(--caret-height, 2.2rem);
+  background-color: var(--caret-bg, var(--caret-color));
+  border: var(--caret-border, none);
+  transition: transform 0.12s ease-out;
+  animation: var(--caret-animation, blink 1s infinite);
+  will-change: transform;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@keyframes smooth-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.15; }
+}
+
+/* Pause blinking when typing */
+.typingArea:focus-within .caret {
+  animation: none;
+  opacity: 1;
+}
+
+.hiddenInput {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.paceCaret {
+  position: absolute;
+  top: var(--caret-top, 3px);
+  left: 0;
+  width: var(--caret-width, 2px);
+  height: var(--caret-height, 2.2rem);
+  background-color: var(--sub-color);
+  opacity: 0.35;
+  border: var(--caret-border, none);
+  transition: transform 0.08s linear;
+  will-change: transform;
+  pointer-events: none;
+}
