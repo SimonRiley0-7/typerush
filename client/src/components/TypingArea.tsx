@@ -47,7 +47,7 @@ export const TypingArea: React.FC<TypingAreaProps> = ({ words, typed, cursor, st
 
   // Keep focus on load and add global keydown to auto-focus when typing starts
   useEffect(() => {
-    if (status === 'idle') {
+    if (status !== 'finished') {
       inputRef.current?.focus();
     }
 
