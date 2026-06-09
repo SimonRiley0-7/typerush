@@ -30,12 +30,32 @@ export function AccountSettings() {
   const updateProfileName = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.updateUser({
+    
+    const { error: authError } = await supabase.auth.updateUser({
       data: { full_name: displayName }
     });
+
+    if (authError) {
+      setLoading(false);
+      showMessage(authError.message, 'error');
+      return;
+    }
+
+    if (user) {
+      const { error: dbError } = await supabase
+        .from('profiles')
+        .update({ display_name: displayName })
+        .eq('id', user.id);
+        
+      if (dbError) {
+        setLoading(false);
+        showMessage(dbError.message, 'error');
+        return;
+      }
+    }
+
     setLoading(false);
-    if (error) showMessage(error.message, 'error');
-    else showMessage('Name updated successfully!', 'success');
+    showMessage('Name updated successfully!', 'success');
   };
 
   const updateEmail = async (e: React.FormEvent) => {

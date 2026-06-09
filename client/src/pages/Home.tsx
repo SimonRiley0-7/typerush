@@ -164,6 +164,9 @@ export function Home() {
             stats={engine.stats} 
             timeElapsed={engine.timeElapsed} 
             mode={`${mode} ${mode === 'time' ? duration : wordCount}`}
+            weakKeys={engine.weakKeys}
+            backspaceCount={engine.backspaceCount}
+            keystrokes={engine.keystrokes}
             onRestart={engine.restart} 
           />
         )}

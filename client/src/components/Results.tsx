@@ -1,15 +1,20 @@
 import React, { useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { calculateAdvancedStats } from '../utils/analytics';
+import type { KeystrokeTiming } from '../utils/analytics';
 
 interface ResultsProps {
   stats: { correct: number; incorrect: number; extra: number; missed: number };
   timeElapsed: number;
   mode: string;
+  weakKeys: Record<string, number>;
+  backspaceCount: number;
+  keystrokes: KeystrokeTiming[];
   onRestart: () => void;
 }
 
-export const Results: React.FC<ResultsProps> = ({ stats, timeElapsed, mode, onRestart }) => {
+export const Results: React.FC<ResultsProps> = ({ stats, timeElapsed, mode, weakKeys, backspaceCount, keystrokes, onRestart }) => {
   const { user } = useAuth();
   const savedRef = useRef(false);
 
@@ -34,6 +39,8 @@ export const Results: React.FC<ResultsProps> = ({ stats, timeElapsed, mode, onRe
       savedRef.current = true; // Prevent double save on strict mode
       
       try {
+        const advanced_stats = calculateAdvancedStats(weakKeys, backspaceCount, keystrokes, timeElapsed);
+
         await supabase.from('tests').insert({
           user_id: user.id,
           wpm: netWPM,
@@ -44,7 +51,8 @@ export const Results: React.FC<ResultsProps> = ({ stats, timeElapsed, mode, onRe
           chars_incorrect: stats.incorrect,
           chars_extra: stats.extra,
           chars_missed: stats.missed,
-          time_elapsed: timeElapsed
+          time_elapsed: timeElapsed,
+          advanced_stats: advanced_stats
         });
       } catch (err) {
         console.error('Failed to save test result', err);
@@ -52,7 +60,7 @@ export const Results: React.FC<ResultsProps> = ({ stats, timeElapsed, mode, onRe
     };
     
     saveResult();
-  }, [user, netWPM, grossWPM, accuracy, mode, stats, timeElapsed]);
+  }, [user, netWPM, grossWPM, accuracy, mode, stats, timeElapsed, weakKeys, backspaceCount, keystrokes]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', marginTop: '2rem' }}>

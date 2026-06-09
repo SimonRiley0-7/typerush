@@ -24,7 +24,12 @@ export function Login() {
   };
 
   const handleOAuthLogin = async (provider: 'google' | 'github' | 'discord') => {
-    await supabase.auth.signInWithOAuth({ provider });
+    await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: window.location.origin
+      }
+    });
   };
 
   return (

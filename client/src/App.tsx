@@ -10,6 +10,8 @@ import { Register } from './pages/Register';
 import { Profile } from './pages/Profile';
 import { Settings } from './pages/Settings';
 import { AccountSettings } from './pages/AccountSettings';
+import { Friends } from './pages/Friends';
+import { Lobby } from './pages/Lobby';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, isLoading } = useAuth();
@@ -41,6 +43,16 @@ function AppContent() {
         <Route path="/account" element={
           <ProtectedRoute>
             <AccountSettings />
+          </ProtectedRoute>
+        } />
+        <Route path="/friends" element={
+          <ProtectedRoute>
+            <Friends />
+          </ProtectedRoute>
+        } />
+        <Route path="/lobby/:lobbyId" element={
+          <ProtectedRoute>
+            <Lobby />
           </ProtectedRoute>
         } />
       </Routes>

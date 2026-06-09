@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 
 export const Header: React.FC = () => {
   const { user, signOut } = useAuth();
@@ -9,6 +10,43 @@ export const Header: React.FC = () => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   let closeTimeoutRef = useRef<any>(null);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    if (!user) {
+      setPendingCount(0);
+      return;
+    }
+
+    const fetchPendingCount = async () => {
+      const { count, error } = await supabase
+        .from('friends')
+        .select('*', { count: 'exact', head: true })
+        .eq('receiver_id', user.id)
+        .eq('status', 'pending');
+      
+      if (!error && count !== null) {
+        setPendingCount(count);
+      }
+    };
+
+    fetchPendingCount();
+
+    const subscription = supabase
+      .channel('header-friends-pending')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'friends'
+      }, () => {
+        fetchPendingCount();
+      })
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [user]);
 
   // Handle clicking outside to close
   useEffect(() => {
@@ -111,6 +149,23 @@ export const Header: React.FC = () => {
               >
                 <Link to="/profile" onClick={() => setDropdownOpen(false)} className="dropdown-item">
                   <i className="fas fa-chart-line" style={{ width: '16px' }}></i> profile
+                </Link>
+                <Link to="/friends" onClick={() => setDropdownOpen(false)} className="dropdown-item" style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                  <i className="fas fa-user-friends" style={{ width: '16px' }}></i> friends
+                  {pendingCount > 0 && (
+                    <span style={{ 
+                      background: 'var(--main-color)', 
+                      color: 'var(--bg-color)', 
+                      borderRadius: '10px', 
+                      padding: '2px 6px', 
+                      fontSize: '0.7rem', 
+                      fontWeight: 'bold', 
+                      marginLeft: 'auto',
+                      lineHeight: 1
+                    }}>
+                      {pendingCount}
+                    </span>
+                  )}
                 </Link>
                 <Link to="/settings" onClick={() => setDropdownOpen(false)} className="dropdown-item">
                   <i className="fas fa-palette" style={{ width: '16px' }}></i> settings

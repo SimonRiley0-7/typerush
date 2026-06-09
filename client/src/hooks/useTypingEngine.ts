@@ -30,6 +30,11 @@ export const useTypingEngine = ({ mode, duration, wordCount }: UseTypingEnginePr
   const [stats, setStats] = useState({ correct: 0, incorrect: 0, extra: 0, missed: 0 });
   const [isFailed, setIsFailed] = useState(false);
   
+  // Advanced Analytics
+  const [weakKeys, setWeakKeys] = useState<Record<string, number>>({});
+  const [backspaceCount, setBackspaceCount] = useState(0);
+  const [keystrokes, setKeystrokes] = useState<{ char: string; timestamp: number }[]>([]);
+  
   const timerRef = useRef<number | null>(null);
   const startTimeRef = useRef<number | null>(null);
 
@@ -70,6 +75,12 @@ export const useTypingEngine = ({ mode, duration, wordCount }: UseTypingEnginePr
     setTimeElapsed(0);
     setStats({ correct: 0, incorrect: 0, extra: 0, missed: 0 });
     setIsFailed(false);
+    
+    // Reset Advanced Analytics
+    setWeakKeys({});
+    setBackspaceCount(0);
+    setKeystrokes([]);
+
     if (timerRef.current) {
       clearInterval(timerRef.current);
     }
@@ -173,6 +184,7 @@ export const useTypingEngine = ({ mode, duration, wordCount }: UseTypingEnginePr
         if (settings.confidenceMode) return; // Ignore backspace in confidence mode
 
         playClickSound(settings.clickSound, settings.soundVolume);
+        setBackspaceCount(prev => prev + 1);
         
         if (charIndex > 0) {
           // Delete character in current word
@@ -301,8 +313,13 @@ export const useTypingEngine = ({ mode, duration, wordCount }: UseTypingEnginePr
         if (charIndex < currentWord.length) {
           if (isCorrect) {
             setStats(s => ({ ...s, correct: s.correct + 1 }));
+            setKeystrokes(prev => [...prev, { char: e.key, timestamp: performance.now() - (startTimeRef.current || performance.now()) }]);
           } else {
             setStats(s => ({ ...s, incorrect: s.incorrect + 1 }));
+            setWeakKeys(prev => {
+              const expectedChar = currentWord[charIndex];
+              return { ...prev, [expectedChar]: (prev[expectedChar] || 0) + 1 };
+            });
           }
         } else {
           setStats(s => ({ ...s, extra: s.extra + 1 }));
@@ -328,6 +345,9 @@ export const useTypingEngine = ({ mode, duration, wordCount }: UseTypingEnginePr
     timeLeft,
     timeElapsed,
     stats,
+    weakKeys,
+    backspaceCount,
+    keystrokes,
     handleKeyDown,
     restart: initializeTest,
     isFailed
