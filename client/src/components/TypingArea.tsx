@@ -45,11 +45,33 @@ export const TypingArea: React.FC<TypingAreaProps> = ({ words, typed, cursor, st
     };
   }, [settings.capsLockWarning]);
 
-  // Keep focus on load
+  // Keep focus on load and add global keydown to auto-focus when typing starts
   useEffect(() => {
     if (status === 'idle') {
       inputRef.current?.focus();
     }
+
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (status === 'finished') return;
+      if (
+        document.activeElement?.tagName === 'INPUT' ||
+        document.activeElement?.tagName === 'TEXTAREA' ||
+        document.activeElement?.tagName === 'SELECT'
+      ) {
+        return;
+      }
+      
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      
+      if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Enter') {
+        inputRef.current?.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleGlobalKeyDown);
+    };
   }, [status]);
 
   // Ghost / Pace Caret Loop
