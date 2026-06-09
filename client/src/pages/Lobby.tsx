@@ -256,6 +256,25 @@ export function Lobby() {
     }
   }, [opponentResults, lobbyStatus]);
 
+  // Cancel match if opponent leaves
+  useEffect(() => {
+    if (lobbyStatus !== 'waiting' && players.length < 2) {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+      }
+      setLobbyStatus('waiting');
+      setSyncWords([]);
+      setSyncTyped([]);
+      setSyncCursor({ wordIndex: 0, charIndex: 0 });
+      setOpponentProgress(0);
+      setOpponentWpm(0);
+      setOpponentResults(null);
+      setMyResults(null);
+      setCountdown(3);
+      alert('Opponent disconnected. The match has been cancelled.');
+    }
+  }, [players.length, lobbyStatus]);
+
   // 5. Toggle Ready State
   const toggleReady = async () => {
     if (!user || !channelRef.current) return;
