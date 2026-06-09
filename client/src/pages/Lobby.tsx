@@ -249,6 +249,13 @@ export function Lobby() {
     }
   }, [syncTyped, syncCursor, lobbyStatus]);
 
+  // Auto-finish if opponent finishes first
+  useEffect(() => {
+    if (opponentResults && lobbyStatus === 'typing') {
+      finishGame();
+    }
+  }, [opponentResults, lobbyStatus]);
+
   // 5. Toggle Ready State
   const toggleReady = async () => {
     if (!user || !channelRef.current) return;
