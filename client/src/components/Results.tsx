@@ -1,7 +1,10 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { calculateAdvancedStats } from '../utils/analytics';
+import { generateAICoachTip } from '../utils/aiCoach';
+import { AICoachTip } from './AICoachTip';
+import type { CoachInsight } from '../utils/aiCoach';
 import type { KeystrokeTiming } from '../utils/analytics';
 
 interface ResultsProps {
@@ -17,6 +20,7 @@ interface ResultsProps {
 export const Results: React.FC<ResultsProps> = ({ stats, timeElapsed, mode, weakKeys, backspaceCount, keystrokes, onRestart }) => {
   const { user } = useAuth();
   const savedRef = useRef(false);
+  const [insight, setInsight] = useState<CoachInsight | null>(null);
 
   // Calculations
   const totalKeystrokes = stats.correct + stats.incorrect + stats.extra;
@@ -40,6 +44,10 @@ export const Results: React.FC<ResultsProps> = ({ stats, timeElapsed, mode, weak
       
       try {
         const advanced_stats = calculateAdvancedStats(weakKeys, backspaceCount, keystrokes, timeElapsed);
+        
+        // Generate AI Insight
+        const generatedInsight = generateAICoachTip(advanced_stats, stats, netWPM, accuracy, timeElapsed);
+        setInsight(generatedInsight);
 
         await supabase.from('tests').insert({
           user_id: user.id,
@@ -99,14 +107,35 @@ export const Results: React.FC<ResultsProps> = ({ stats, timeElapsed, mode, weak
           </div>
         </div>
       </div>
-      
-      <button 
-        id="restart-btn"
-        onClick={onRestart}
-        style={{ padding: '1rem', fontSize: '1.5rem', borderRadius: '8px', marginTop: '2rem', cursor: 'pointer', transition: 'all 0.2s' }}
-      >
-        <i className="fas fa-redo"></i> restart test
-      </button>
+
+      {/* AI Coach Tip */}
+      {insight && (
+        <AICoachTip insight={insight} />
+      )}
+
+      {/* Action Buttons */}
+      <div style={{ display: 'flex', gap: '1rem', marginTop: '3rem' }}>
+        <button 
+          onClick={onRestart}
+          style={{
+            padding: '0.8rem 2rem',
+            fontSize: '1.2rem',
+            background: 'var(--main-color)',
+            color: 'var(--bg-color)',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            fontWeight: 'bold',
+            transition: 'all 0.2s'
+          }}
+          className="hover-bright"
+        >
+          <i className="fas fa-redo"></i> Next Test
+        </button>
+      </div>
     </div>
   );
 };
