@@ -1,10 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { calculateAdvancedStats } from '../utils/analytics';
-import { generateAICoachTip } from '../utils/aiCoach';
 import { AICoachTip } from './AICoachTip';
-import type { CoachInsight } from '../utils/aiCoach';
 import type { KeystrokeTiming } from '../utils/analytics';
 
 interface ResultsProps {
@@ -20,7 +18,6 @@ interface ResultsProps {
 export const Results: React.FC<ResultsProps> = ({ stats, timeElapsed, mode, weakKeys, backspaceCount, keystrokes, onRestart }) => {
   const { user } = useAuth();
   const savedRef = useRef(false);
-  const [insight, setInsight] = useState<CoachInsight | null>(null);
 
   // Calculations
   const totalKeystrokes = stats.correct + stats.incorrect + stats.extra;
@@ -45,10 +42,6 @@ export const Results: React.FC<ResultsProps> = ({ stats, timeElapsed, mode, weak
       try {
         const advanced_stats = calculateAdvancedStats(weakKeys, backspaceCount, keystrokes, timeElapsed);
         
-        // Generate AI Insight
-        const generatedInsight = generateAICoachTip(advanced_stats, stats, netWPM, accuracy, timeElapsed);
-        setInsight(generatedInsight);
-
         await supabase.from('tests').insert({
           user_id: user.id,
           wpm: netWPM,
@@ -109,9 +102,13 @@ export const Results: React.FC<ResultsProps> = ({ stats, timeElapsed, mode, weak
       </div>
 
       {/* AI Coach Tip */}
-      {insight && (
-        <AICoachTip insight={insight} />
-      )}
+      <AICoachTip 
+        advancedStats={calculateAdvancedStats(weakKeys, backspaceCount, keystrokes, timeElapsed)}
+        stats={stats}
+        wpm={netWPM}
+        accuracy={accuracy}
+        timeElapsed={timeElapsed}
+      />
 
       {/* Action Buttons */}
       <div style={{ display: 'flex', gap: '1rem', marginTop: '3rem' }}>

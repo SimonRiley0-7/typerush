@@ -1,13 +1,15 @@
 import type { AdvancedStats } from './analytics';
+import { CreateWebWorkerMLCEngine, WebWorkerMLCEngine } from '@mlc-ai/web-llm';
+import type { InitProgressReport } from '@mlc-ai/web-llm';
 
 export interface CoachInsight {
-  type: 'endurance' | 'accuracy' | 'technique' | 'praise';
+  type: 'endurance' | 'accuracy' | 'technique' | 'praise' | 'ai';
   title: string;
   message: string;
   actionableDrill?: string;
 }
 
-export const generateAICoachTip = (
+export const generateRuleBasedCoachTip = (
   advancedStats: AdvancedStats | null,
   stats: { correct: number; incorrect: number; extra: number; missed: number },
   wpm: number,
@@ -88,5 +90,67 @@ export const generateAICoachTip = (
     title: 'Solid Session',
     message: `You're holding a steady pace at ${wpm} WPM. Consistency is the key to breaking through plateaus.`,
     actionableDrill: 'Try mixing up your practice with different text lengths (15s for raw speed bursts, 60s for endurance).'
+  };
+};
+
+export let llmEngine: WebWorkerMLCEngine | null = null;
+
+export const initLLM = async (onProgress: (progress: InitProgressReport) => void) => {
+  if (llmEngine) return llmEngine;
+  
+  llmEngine = await CreateWebWorkerMLCEngine(
+    new Worker(new URL('./llmWorker.ts', import.meta.url), { type: 'module' }),
+    'Llama-3.2-1B-Instruct-q4f16_1-MLC',
+    { initProgressCallback: onProgress }
+  );
+  
+  return llmEngine;
+};
+
+export const generateLLMCoachTip = async (
+  advancedStats: AdvancedStats | null,
+  stats: { correct: number; incorrect: number; extra: number; missed: number },
+  wpm: number,
+  accuracy: number,
+  timeElapsed: number,
+  onUpdate: (text: string) => void
+): Promise<CoachInsight> => {
+  if (!llmEngine) {
+    throw new Error('LLM Engine not initialized');
+  }
+
+  const prompt = `Analyze the user's typing performance and provide a short, actionable tip.
+DO NOT use markdown formatting like bolding or lists. Be extremely concise. Keep it under 2 sentences.
+
+User Performance:
+WPM: ${wpm}
+Accuracy: ${accuracy}%
+Time: ${timeElapsed}s
+Mistakes: ${stats.incorrect} incorrect, ${stats.missed} missed, ${stats.extra} extra
+Fatigue Drop-off: ${advancedStats?.endurance.dropOffPercentage || 0}%
+Backspace count: ${advancedStats?.backspaceCount || 0}
+Weak Keys: ${JSON.stringify(advancedStats?.weakKeys || {})}
+
+Provide your coaching tip directly:`;
+
+  const chunks = await llmEngine.chat.completions.create({
+    messages: [
+      { role: "system", content: "You are an expert typing coach. You give concise, highly specific, actionable advice based on raw data." },
+      { role: "user", content: prompt }
+    ],
+    temperature: 0.7,
+    stream: true,
+  });
+
+  let message = "";
+  for await (const chunk of chunks) {
+    message += chunk.choices[0]?.delta.content || "";
+    onUpdate(message);
+  }
+
+  return {
+    type: 'ai',
+    title: 'Llama 3.2 Analysis',
+    message: message
   };
 };
