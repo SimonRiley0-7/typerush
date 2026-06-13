@@ -6,6 +6,8 @@ import { useAppSettings } from '../contexts/SettingsContext';
 import { TypingArea } from '../components/TypingArea';
 import { playClickSound } from '../utils/audio';
 import { generateWords } from '../utils/words';
+import { CommandBar } from '../components/CommandBar';
+import type { TestMode } from '../hooks/useTypingEngine';
 
 type LobbyStatus = 'waiting' | 'countdown' | 'typing' | 'finished';
 
@@ -17,6 +19,16 @@ interface PlayerPresence {
   status: 'lobby' | 'typing' | 'finished';
   wpm: number;
   accuracy: number;
+  joinedAt: number;
+  isHost: boolean;
+}
+
+export interface ChatMessage {
+  id: string;
+  userId: string;
+  displayName: string;
+  text: string;
+  timestamp: number;
 }
 
 const cleanAccents = (str: string) => {
@@ -33,6 +45,13 @@ export function Lobby() {
   const [players, setPlayers] = useState<PlayerPresence[]>([]);
   const [lobbyStatus, setLobbyStatus] = useState<LobbyStatus>('waiting');
   const [countdown, setCountdown] = useState(3);
+  
+  // Chat and Settings
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [gameMode, setGameMode] = useState<TestMode>('time');
+  const [gameDuration, setGameDuration] = useState(60);
+  const [gameWordCount, setGameWordCount] = useState(25);
   
   // Game states (synced words)
   const [syncWords, setSyncWords] = useState<string[]>([]);
@@ -104,16 +123,27 @@ export function Lobby() {
                   isReady: p.isReady || false,
                   status: p.status || 'lobby',
                   wpm: p.wpm || 0,
-                  accuracy: p.accuracy || 100
+                  accuracy: p.accuracy || 100,
+                  joinedAt: p.joinedAt || Date.now(),
+                  isHost: false
                 });
               }
             }
           });
-          setPlayers(Array.from(uniquePlayersMap.values()));
+          
+          const sortedPlayers = Array.from(uniquePlayersMap.values()).sort((a, b) => a.joinedAt - b.joinedAt);
+          if (sortedPlayers.length > 0) {
+            sortedPlayers[0].isHost = true;
+          }
+          
+          setPlayers(sortedPlayers);
         });
 
         // Broadcast events
         channel.on('broadcast', { event: 'start-game' }, ({ payload }) => {
+          setGameMode(payload.mode);
+          setGameDuration(payload.duration);
+          setGameWordCount(payload.wordCount);
           setSyncWords(payload.words);
           setSyncTyped(['']);
           setSyncCursor({ wordIndex: 0, charIndex: 0 });
@@ -124,6 +154,16 @@ export function Lobby() {
           setMyResults(null);
           setLobbyStatus('countdown');
           setCountdown(3);
+        });
+
+        channel.on('broadcast', { event: 'chat-message' }, ({ payload }) => {
+          setChatMessages(prev => [...prev, payload]);
+        });
+
+        channel.on('broadcast', { event: 'sync-settings' }, ({ payload }) => {
+          setGameMode(payload.mode);
+          setGameDuration(payload.duration);
+          setGameWordCount(payload.wordCount);
         });
 
         channel.on('broadcast', { event: 'progress' }, ({ payload }) => {
@@ -161,7 +201,8 @@ export function Lobby() {
               username: myUsername,
               display_name: myDisplayName,
               isReady: false,
-              status: 'lobby'
+              status: 'lobby',
+              joinedAt: Date.now()
             });
           }
         });
@@ -183,21 +224,29 @@ export function Lobby() {
     if (lobbyStatus !== 'countdown') return;
     if (countdown === 0) {
       setLobbyStatus('typing');
-      setTimeLeft(60);
       setTimeElapsed(0);
       
-      timerIntervalRef.current = setInterval(() => {
-        setTimeElapsed((prev) => {
-          const next = prev + 1;
-          if (next >= 60) {
-            clearInterval(timerIntervalRef.current);
-            finishGame();
-            return 60;
-          }
-          return next;
-        });
-        setTimeLeft((prev) => (prev <= 1 ? 0 : prev - 1));
-      }, 1000);
+      if (gameMode === 'time') {
+        setTimeLeft(gameDuration);
+        timerIntervalRef.current = setInterval(() => {
+          setTimeElapsed((prev) => {
+            const next = prev + 1;
+            if (next >= gameDuration) {
+              clearInterval(timerIntervalRef.current);
+              finishGame();
+              return gameDuration;
+            }
+            return next;
+          });
+          setTimeLeft((prev) => (prev <= 1 ? 0 : prev - 1));
+        }, 1000);
+      } else {
+        // Words mode, just count up elapsed time
+        setTimeLeft(0);
+        timerIntervalRef.current = setInterval(() => {
+          setTimeElapsed((prev) => prev + 1);
+        }, 1000);
+      }
       
       return;
     }
@@ -207,7 +256,7 @@ export function Lobby() {
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [lobbyStatus, countdown]);
+  }, [lobbyStatus, countdown, gameMode, gameDuration]);
 
   // 3. Shift Keys tracking
   useEffect(() => {
@@ -294,15 +343,30 @@ export function Lobby() {
   // 6. Host Starts the match
   const startMatch = () => {
     if (players.length < 2) return;
-    // Synced race is always a fixed 40 words
-    const wordsList = generateWords(40);
+    const wordsList = generateWords(gameMode === 'time' ? 300 : gameWordCount);
     if (channelRef.current) {
       channelRef.current.send({
         type: 'broadcast',
         event: 'start-game',
         payload: {
-          words: wordsList
+          words: wordsList,
+          mode: gameMode,
+          duration: gameDuration,
+          wordCount: gameWordCount
         }
+      });
+    }
+  };
+
+  const handleSettingsChange = (newMode: TestMode, newDuration: number, newWordCount: number) => {
+    setGameMode(newMode);
+    setGameDuration(newDuration);
+    setGameWordCount(newWordCount);
+    if (channelRef.current) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'sync-settings',
+        payload: { mode: newMode, duration: newDuration, wordCount: newWordCount }
       });
     }
   };
@@ -527,6 +591,28 @@ export function Lobby() {
     setTimeout(() => setCopySuccess(false), 2000);
   };
 
+  const sendChatMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim() || !channelRef.current || !user) return;
+    
+    const newMessage: ChatMessage = {
+      id: Math.random().toString(36).substring(7),
+      userId: user.id,
+      displayName: myProfileInfo?.display_name || user.user_metadata?.full_name || 'Anonymous',
+      text: chatInput.trim(),
+      timestamp: Date.now()
+    };
+
+    channelRef.current.send({
+      type: 'broadcast',
+      event: 'chat-message',
+      payload: newMessage
+    });
+    
+    setChatMessages(prev => [...prev, newMessage]);
+    setChatInput('');
+  };
+
   // Helpers to isolate my progress
   const me = players.find(p => p.user_id === user?.id);
   const opponent = players.find(p => p.user_id !== user?.id);
@@ -562,7 +648,12 @@ export function Lobby() {
           {/* Players Panel */}
           <div style={{ display: 'flex', gap: '2.5rem', width: '100%', maxWidth: '600px', justifyContent: 'center', marginTop: '1rem' }}>
             {/* Player 1 Slot */}
-            <div style={{ flex: 1, background: 'var(--sub-alt-color)', padding: '1.5rem', borderRadius: '10px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+            <div style={{ flex: 1, background: 'var(--sub-alt-color)', padding: '1.5rem', borderRadius: '10px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', position: 'relative' }}>
+              {me?.isHost && (
+                <div style={{ position: 'absolute', top: '-10px', right: '-10px', background: 'var(--main-color)', color: 'var(--bg-color)', padding: '0.2rem 0.6rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                  HOST
+                </div>
+              )}
               <div style={{ width: '50px', height: '50px', borderRadius: '50%', backgroundColor: 'var(--main-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--bg-color)', fontSize: '1.5rem' }}>
                 <i className="fas fa-user"></i>
               </div>
@@ -586,6 +677,11 @@ export function Lobby() {
 
             {/* Player 2 Slot */}
             <div style={{ flex: 1, background: 'var(--sub-alt-color)', padding: '1.5rem', borderRadius: '10px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', position: 'relative' }}>
+              {opponent?.isHost && (
+                <div style={{ position: 'absolute', top: '-10px', right: '-10px', background: 'var(--main-color)', color: 'var(--bg-color)', padding: '0.2rem 0.6rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                  HOST
+                </div>
+              )}
               {opponent ? (
                 <>
                   <div style={{ width: '50px', height: '50px', borderRadius: '50%', backgroundColor: 'var(--sub-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--bg-color)', fontSize: '1.5rem' }}>
@@ -614,8 +710,61 @@ export function Lobby() {
             </div>
           </div>
 
+          {/* Settings / CommandBar */}
+          <div style={{ width: '100%', pointerEvents: me?.isHost ? 'auto' : 'none', opacity: me?.isHost ? 1 : 0.6 }}>
+            {me?.isHost ? (
+               <div style={{ color: 'var(--sub-color)', fontSize: '0.85rem', marginBottom: '0.5rem' }}>You are the Host. Choose match settings:</div>
+            ) : (
+               <div style={{ color: 'var(--sub-color)', fontSize: '0.85rem', marginBottom: '0.5rem' }}>Waiting for Host to choose settings...</div>
+            )}
+            <CommandBar 
+              mode={gameMode} 
+              setMode={(m) => handleSettingsChange(m, gameDuration, gameWordCount)} 
+              duration={gameDuration} 
+              setDuration={(d) => handleSettingsChange(gameMode, d, gameWordCount)}
+              wordCount={gameWordCount}
+              setWordCount={(w) => handleSettingsChange(gameMode, gameDuration, w)}
+            />
+          </div>
+
+          {/* Chat System */}
+          <div style={{ width: '100%', maxWidth: '600px', background: 'var(--sub-alt-color)', borderRadius: '10px', display: 'flex', flexDirection: 'column', height: '250px', border: '1px solid rgba(255,255,255,0.03)', marginTop: '1rem' }}>
+            <div style={{ padding: '0.8rem 1.2rem', borderBottom: '1px solid rgba(255,255,255,0.05)', color: 'var(--sub-color)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <i className="fas fa-comments"></i> Lobby Chat
+            </div>
+            <div style={{ flex: 1, padding: '1rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+              {chatMessages.length === 0 && (
+                <div style={{ color: 'var(--sub-color)', textAlign: 'center', margin: 'auto', fontSize: '0.85rem', opacity: 0.5 }}>
+                  No messages yet. Say hi!
+                </div>
+              )}
+              {chatMessages.map(msg => (
+                <div key={msg.id} style={{ display: 'flex', gap: '0.8rem', alignItems: 'flex-start' }}>
+                  <strong style={{ color: msg.userId === user?.id ? 'var(--main-color)' : 'var(--text-color)', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
+                    {msg.displayName}:
+                  </strong>
+                  <span style={{ color: 'var(--sub-color)', fontSize: '0.85rem', wordBreak: 'break-word' }}>
+                    {msg.text}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <form onSubmit={sendChatMessage} style={{ display: 'flex', padding: '0.8rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+              <input 
+                type="text" 
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Type a message..."
+                style={{ flex: 1, background: 'transparent', border: 'none', color: 'var(--text-color)', outline: 'none', fontSize: '0.9rem' }}
+              />
+              <button type="submit" disabled={!chatInput.trim()} style={{ background: 'transparent', border: 'none', color: chatInput.trim() ? 'var(--main-color)' : 'var(--sub-color)', cursor: chatInput.trim() ? 'pointer' : 'default' }}>
+                <i className="fas fa-paper-plane"></i>
+              </button>
+            </form>
+          </div>
+
           {/* Start Button Panel */}
-          {allPlayersReady && (
+          {me?.isHost && allPlayersReady ? (
             <button 
               onClick={startMatch}
               className="fade-in"
@@ -627,7 +776,9 @@ export function Lobby() {
             >
               Start Typing Race!
             </button>
-          )}
+          ) : allPlayersReady ? (
+            <div style={{ color: 'var(--main-color)', marginTop: '1rem', fontWeight: 'bold' }}>Waiting for host to start the match...</div>
+          ) : null}
         </div>
       )}
 
