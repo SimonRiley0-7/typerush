@@ -609,7 +609,6 @@ export function Lobby() {
       payload: newMessage
     });
     
-    setChatMessages(prev => [...prev, newMessage]);
     setChatInput('');
   };
 
